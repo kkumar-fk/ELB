@@ -1,2 +1,2 @@
-Create appropriate directories here, and push your changes relating
+Create appropriate directories here, and push changes relating
 to ELB.
