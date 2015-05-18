@@ -18,7 +18,9 @@ NREQUESTS=1000000
 NCONCURRENT=500
 SIZE=64
 
-echo "$0: Server Port #Requests #Concurrent #I/O-Size"
+echo "($0: Server Port #Requests #Concurrent #I/O-Size"
+echo "e.g.: $0 172.20.232.122 80 1000000 500 64)"
+
 
 if [ $# -gt 0 ]
 then
