@@ -1,5 +1,33 @@
 #!/bin/bash
 
+typeset -i h
+typeset -i nhosts
+
+SERVER=172.20.232.106
+PORT=80
+HOSTS="172.20.232.112 172.20.232.114 172.20.232.117 172.20.232.119"
+NREQUESTS=1000000
+NCONCURRENT=500
+SIZE=64
+
+nhosts=`echo $HOSTS | wc -w`
+nhosts=$nhosts-1
+
+# Save pids to kill
+declare -a pids
+
+# Install trap handler
+trap ctrl_c_handler INT
+
+function ctrl_c_handler()
+{
+	for h in `seq 0 $nhosts`
+	do
+		kill ${pids[$h]} 2>/dev/null
+	done
+	exit 1
+}
+
 function my_add
 {
         s="0.0"
@@ -10,13 +38,6 @@ function my_add
         done
         echo $s | bc -l
 }
-
-SERVER=172.20.232.106
-PORT=80
-HOSTS="172.20.232.112 172.20.232.114 172.20.232.117 172.20.232.119"
-NREQUESTS=1000000
-NCONCURRENT=500
-SIZE=64
 
 echo "($0: Server Port #Requests #Concurrent #I/O-Size"
 echo "e.g.: $0 172.20.232.122 80 1000000 500 64)"
@@ -57,17 +78,23 @@ mkdir -p $dir
 # fi
 
 echo
-echo "Testing against $HOSTS"
+echo "Testing against: $HOSTS"
 echo "Command: ab -k -n $NREQUESTS -c $NCONCURRENT http://$SERVER:$PORT/$SIZE"
 echo
 
+h=0
 for host in $HOSTS
 do
 	ssh "$host" "ab -k -n $NREQUESTS " \
 		"-c $NCONCURRENT http://$SERVER:$PORT/$SIZE \
 		> /tmp/ab-result 2>/dev/null" &
+	pids[$h]=$!
+	h=$h+1
 done
 wait
+
+# Remove trap handler
+trap - INT
 
 for host in $HOSTS
 do
@@ -93,3 +120,4 @@ then
 fi
 
 echo
+exit 0
