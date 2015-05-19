@@ -1,1 +1,2 @@
-A sample tool to create a haproxy configuration file.
+Sample tool to create haproxy configuration file. This needs to read
+input and save parameters before creating file - TBD.
