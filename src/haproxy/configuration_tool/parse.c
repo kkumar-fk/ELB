@@ -270,6 +270,22 @@ int test_config(char *file)
 	return system(cmd);
 }
 
+int move_config_file(char *config_file, char *path)
+{
+	char cmd[1024];
+
+	return 0;
+
+	sprintf(cmd, "mv %s/%s %s/%s.prev 2>/dev/null",
+		path, config_file, path, config_file);
+	system(cmd);
+	sprintf(cmd, "mv %s %s 2>/dev/null", config_file, path);
+	system(cmd);
+
+	sprintf(cmd, "%s/%s", path, config_file);
+	return test_config(cmd);
+}
+
 int main(void)
 {
 	FILE *fp = fopen(CONFIG_FILE, "w");
@@ -319,6 +335,11 @@ int main(void)
 	if (test_config(CONFIG_FILE)) {
 		printf("Config file generated is bad\n");
 		ret = 1;
+	} else {
+		if (move_config_file(CONFIG_FILE, CONFIG_PATH)) {
+			printf("Error while moving configuration file\n");
+			ret = 1;
+		}
 	}
 
 	return ret;

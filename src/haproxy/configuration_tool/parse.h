@@ -28,3 +28,5 @@
 
 #define SERVER_NAME	"nginx-"
 #define CONFIG_FILE	"haproxy.cfg"
+
+#define CONFIG_PATH	"/etc/haproxy/"
