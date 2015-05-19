@@ -4,15 +4,16 @@
 #include <string.h>
 #include "parse.h"
 
-void write_cpu_map(FILE *fp, int max_cpus)
-{
-	int i = 1;
+static int forward_frontend_num = 1, forward_backend_num = 1;
+static int reverse_frontend_num = 1, reverse_backend_num = 1;
 
-	while (i <= max_cpus) {
-		fprintf(fp, "\tcpu-map %d %d\n", i, i-1);
-		i++;
-	}
-}
+static char vip_ips[MAX_VIPS][MAX_LEN], server_ips[MAX_SERVERS][MAX_LEN];
+static int  vip_ports[MAX_VIPS], server_ports[MAX_SERVERS];
+
+static int sport[MAX_SERVERS], eport[MAX_SERVERS];
+static char source_ips[MAX_SERVERS][MAX_LEN];
+
+static int server_count = 1;
 
 int min(int a, int b)
 {
@@ -29,8 +30,19 @@ int initialize()
 	return numcpus;
 }
 
+void write_cpu_map(FILE *fp, int max_cpus)
+{
+	int i = 1;
+
+	while (i <= max_cpus) {
+		fprintf(fp, "\tcpu-map %d %d\n", i, i-1);
+		i++;
+	}
+}
+
 void write_global_static(FILE *fp, int numcpus)
 {
+	fprintf(fp, "# Global section\n");
 	fprintf(fp, "global\n");
 	fprintf(fp, "\tlog 127.0.0.1\tlocal0\n");
 	fprintf(fp, "\tlog 127.0.0.1\tlocal1 notice\n");
@@ -47,6 +59,7 @@ void write_global_static(FILE *fp, int numcpus)
 
 void write_userlist_static(FILE *fp)
 {
+	fprintf(fp, "# List of users\n");
 	fprintf(fp, "userlist stats-auth\n");
 	fprintf(fp, "\tgroup admin users admin\n");
 	fprintf(fp, "\tuser  admin insecure-password admin\n");
@@ -56,6 +69,7 @@ void write_userlist_static(FILE *fp)
 
 void write_default_static(FILE *fp)
 {
+	fprintf(fp, "# Default section\n");
 	fprintf(fp, "defaults\n");
 	fprintf(fp, "\tmode http\n");
 	fprintf(fp, "\toption forwardfor\n");
@@ -72,21 +86,28 @@ void write_default_static(FILE *fp)
 	fprintf(fp, "\tcompression type %s\n\n", COMPRESSION_TYPE);
 }
 
-int forward_frontend_num = 1;
-int forward_backend_num = 1;
-int reverse_frontend_num = 1;
-int reverse_backend_num = 1;
+void save_stats_once(FILE *fp)
+{
+	static int first_time = 1;
 
-char vip_ips[MAX_VIPS][MAX_LEN];
-int  vip_ports[MAX_VIPS];
-char server_ips[MAX_SERVERS][MAX_LEN];
-int  server_ports[MAX_SERVERS];
+	if (first_time) {
+		first_time = 0;
+
+		fprintf(fp, "\tstats uri /stats\n");
+		fprintf(fp, "\tstats enable\n");
+		fprintf(fp, "\tacl AUTH http_auth(stats-auth)\n");
+		fprintf(fp, "\tacl AUTH_ADMIN http_auth(stats-auth) admin\n");
+		fprintf(fp, "\tstats http-request auth unless AUTH\n");
+	}
+}
 
 void write_frontend_reverse(FILE *fp, char *type, int num,
 			    char vips[MAX_VIPS][MAX_LEN], int ports[MAX_VIPS])
 {
 	int i;
 
+	fprintf(fp, "# Reverse Proxy frontend section %d\n",
+		reverse_frontend_num);
 	fprintf(fp, "frontend www-http-%s-%d\n", type, reverse_frontend_num);
 	fprintf(fp, "\tbind ");
 
@@ -95,11 +116,10 @@ void write_frontend_reverse(FILE *fp, char *type, int num,
 			fprintf(fp, ",");
 		fprintf(fp, "%s:%d", vips[i], ports[i]);
 	}
-	fprintf(fp, "\n\tstats uri /stats\n");
-	fprintf(fp, "\tstats enable\n");
-	fprintf(fp, "\tacl AUTH http_auth(stats-auth)\n");
-	fprintf(fp, "\tacl AUTH_ADMIN http_auth(stats-auth) admin\n");
-	fprintf(fp, "\tstats http-request auth unless AUTH\n");
+	fprintf(fp, "\n");
+
+	save_stats_once(fp);
+
 	fprintf(fp, "\tdefault_backend www-backend-%s-%d\n\n",
 		type, reverse_frontend_num++);
 }
@@ -109,6 +129,8 @@ void write_frontend_forward(FILE *fp, char *type, int num,
 {
 	int i;
 
+	fprintf(fp, "# Forward Proxy frontend section %d\n",
+		forward_frontend_num);
 	fprintf(fp, "frontend www-http-%s-%d\n", type, forward_frontend_num);
 	fprintf(fp, "\tbind ");
 
@@ -117,8 +139,10 @@ void write_frontend_forward(FILE *fp, char *type, int num,
 			fprintf(fp, ",");
 		fprintf(fp, "%s:%d", vips[i], ports[i]);
 	}
-	/* Print other params if not already done so earlier */
-	/* Every function needs to check if it was done, set by a global */
+	fprintf(fp, "\n");
+
+	save_stats_once(fp);
+
 	fprintf(fp, "\n\tdefault_backend www-backend-%s-%d\n\n",
 		type, forward_frontend_num++);
 }
@@ -165,13 +189,14 @@ void write_static(FILE *fp, int numcpus)
 	write_default_static(fp);
 }
 
-static int server_count = 1;
 void write_backend_reverse(FILE *fp, char *type, int num,
 			   char ips[MAX_SERVERS][MAX_LEN],
 			   int ports[MAX_SERVERS])
 {
 	int i;
 
+	fprintf(fp, "# Reverse Proxy backend section %d\n",
+		reverse_backend_num);
 	fprintf(fp, "backend www-backend-%s-%d\n", type, reverse_backend_num++);
 	fprintf(fp, "\tmode http\n");
 	fprintf(fp, "\tmaxconn 60000\n");
@@ -193,6 +218,8 @@ void write_backend_forward(FILE *fp, char *type, int num,
 {
 	int i;
 
+	fprintf(fp, "# Forward Proxy backend section %d\n",
+		forward_backend_num);
 	fprintf(fp, "backend www-backend-%s-%d\n", type, forward_backend_num++);
 	fprintf(fp, "\tmode http\n");
 	fprintf(fp, "\tmaxconn 60000\n");
@@ -219,9 +246,6 @@ void write_backend(FILE *fp, char *type, int num,
 				      eport);
 }
 
-int sport[MAX_SERVERS], eport[MAX_SERVERS];
-char source_ips[MAX_SERVERS][MAX_LEN];
-
 void set_source_ips(char sip[MAX_SERVERS][MAX_LEN], int *sport, int *dport,
 		    int max)
 {
@@ -242,7 +266,7 @@ int test_config(char *file)
 {
 	char cmd[1024];
 
-	sprintf(cmd, "haproxy -c -f %s #2>/dev/null", file);
+	sprintf(cmd, "haproxy -c -f %s", file);
 	return system(cmd);
 }
 
@@ -275,29 +299,27 @@ int main(void)
 
 	set_ip_ports(server_ips, server_ports, 8, SIP);
 	write_backend(fp, REVERSE_PROXY, 8, server_ips, server_ports,
-		   NULL, NULL, NULL);
+		      NULL, NULL, NULL);
 
 	set_ip_ports(server_ips, server_ports, 3, SIP);
 	write_backend(fp, REVERSE_PROXY, 3, server_ips, server_ports,
-		   NULL, NULL, NULL);
+		      NULL, NULL, NULL);
 
 	set_ip_ports(server_ips, server_ports, 8, SIP);
 	write_backend(fp, REVERSE_PROXY, 8, server_ips, server_ports,
-		   NULL, NULL, NULL);
+		      NULL, NULL, NULL);
 
 	set_ip_ports(server_ips, server_ports, 2, SIP);
 	set_source_ips(source_ips, sport, eport, 2);
 	write_backend(fp, FORWARD_PROXY, 2, server_ips, server_ports,
-		   source_ips, sport, eport);
+		      source_ips, sport, eport);
 
 	fclose(fp);
 
 	if (test_config(CONFIG_FILE)) {
-		printf("Config file is bad\n");
+		printf("Config file generated is bad\n");
 		ret = 1;
-	} else
-		printf("Config file is good\n");
+	}
 
 	return ret;
-
 }
