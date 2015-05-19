@@ -270,35 +270,78 @@ int test_config(char *file)
 	return system(cmd);
 }
 
-int move_config_file(char *config_file, char *path)
+int mv_config_file(char *cfile, char *path)
 {
-	char cmd[1024];
-
 	return 0;
 
-	sprintf(cmd, "mv %s/%s %s/%s.prev 2>/dev/null",
-		path, config_file, path, config_file);
-	system(cmd);
-	sprintf(cmd, "mv %s %s 2>/dev/null", config_file, path);
-	system(cmd);
+	char cmd[1024];
 
-	sprintf(cmd, "%s/%s", path, config_file);
+	sprintf(cmd, "mv %s/%s %s/%s.prev 2>/dev/null",
+		path, cfile, path, cfile);
+	if (system(cmd))
+		return 1;
+
+	sprintf(cmd, "mv %s %s 2>/dev/null", cfile, path);
+	if (system(cmd)) {
+		/* Restore previous configuration */
+		sprintf(cmd, "mv %s/%s %s/%s.prev 2>/dev/null",
+			path, cfile, path, cfile);
+		system(cmd);
+		return 1;
+	}
+
+	sprintf(cmd, "%s/%s", path, cfile);
 	return test_config(cmd);
+}
+
+int reload_haproxy(void)
+{
+	return 0;
+
+	char cmd[1024];
+
+	sprintf(cmd, "/etc/init.d/haproxy reload > /dev/null 2>&1");
+	return system(cmd);
+}
+
+int config_file_done(char *cfile)
+{
+	int ret = 0;
+
+	if (test_config(CONFIG_FILE)) {
+		fprintf(stderr, "Config file generated is bad\n");
+		ret = 1;
+	} else {
+		if (mv_config_file(CONFIG_FILE, CONFIG_PATH)) {
+			fprintf(stderr, "Error moving configuration file\n");
+			ret = 1;
+		} else if (reload_haproxy()) {
+			fprintf(stderr, "Error reloading haproxy\n");
+			ret = 1;
+		}
+	}
+
+	return ret;
 }
 
 int main(void)
 {
+	int numcpus, ret;
 	FILE *fp = fopen(CONFIG_FILE, "w");
-	int numcpus;
-	int ret = 0;
 
 	if (!fp) {
-		perror("/tmp/config");
+		perror(CONFIG_FILE);
 		exit(1);
 	}
 
 	numcpus = initialize();
 
+	/*
+	 * Actual structure of program is:
+	 * while read input
+	 *	parse() one section
+	 *	save() one section
+	 */
 	write_static(fp, numcpus);
 
 	set_ip_ports(vip_ips, vip_ports, 5, VIP);
@@ -332,15 +375,5 @@ int main(void)
 
 	fclose(fp);
 
-	if (test_config(CONFIG_FILE)) {
-		printf("Config file generated is bad\n");
-		ret = 1;
-	} else {
-		if (move_config_file(CONFIG_FILE, CONFIG_PATH)) {
-			printf("Error while moving configuration file\n");
-			ret = 1;
-		}
-	}
-
-	return ret;
+	return config_file_done(CONFIG_FILE);
 }

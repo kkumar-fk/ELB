@@ -30,3 +30,11 @@
 #define CONFIG_FILE	"haproxy.cfg"
 
 #define CONFIG_PATH	"/etc/haproxy/"
+
+/* Define different sections returned as they are parsed */
+#define GLOBAL_SECTION		1
+#define DEFAULTS_SECTION	2
+#define USERLIST_SECTION	3
+#define FRONTEND_SECTION	4
+#define FRONTEND_SSL_SECTION	5
+#define BACKEND_SECTION		6
