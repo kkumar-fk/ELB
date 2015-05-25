@@ -1,0 +1,288 @@
+#!/bin/bash
+
+typeset -i nhosts
+
+# Order of arguments is as follows:
+SERVER=172.20.232.67	# 10G Backend
+#SERVER=3.3.3.10	# 40G HAProxy
+PORT=80
+NREQUESTS=10000000
+NCONCURRENT=500
+SIZE=128K
+TIME=10
+SPEED="10g"
+ITERS=1
+
+http_type="http"
+nhosts=`echo $CLIENTS1 $CLIENTS2 | wc -w`
+nhosts=$nhosts-1
+
+# One time - create ssh keys and copy to the test systems
+# ssh-keygen 
+# if [ $? -eq 0 ]
+# then
+	# for host in $CLIENTS
+	# do
+		# ssh-copy-id $host
+	# done
+	# for host in $CLIENTS
+	# do
+		# ssh-copy-id iaas@$host
+	# done
+# fi
+
+# Function to add numbers and print a result
+function my_add
+{
+        s="0.0"
+        while [ $# -gt 0 ]
+        do
+                s=$s+"$1"
+                shift 1
+        done
+        echo $s | bc -l
+}
+
+if [ $# -eq 0 ]
+then
+	echo -n "Need either atleast 1 argument, or 'auto' to use standard "
+	echo "arguments. Usage: "
+	echo "	$0 auto; or"
+	echo "	$0 server Port #Requests #Concurrent #I/O-Size Time 10g/40g"
+	echo "e.g.:	$0 172.20.232.122 80 1000000 500 64 ; or"
+	echo "	$0 auto"
+	exit 1
+fi
+
+if [ "$1" != "auto" ]
+then
+	SERVER=$1
+	if [ $# -gt 1 ]
+	then
+		PORT=$2
+		if [ $PORT == 443 ]
+		then
+			http_type="https"
+		fi
+
+		if [ $# -gt 2 ]
+		then
+			NREQUESTS=$3
+			if [ $# -gt 3 ]
+			then
+				NCONCURRENT=$4
+				if [ $# -gt 4 ]
+				then
+					SIZE=$5
+					if [ $# -gt 5 ]
+					then
+						TIME=$6
+						if [ $# -gt 6 ]
+						then
+							SPEED=$7
+							if [ $# -gt 7 ]
+							then
+								ITERS=$8
+							fi
+						fi
+					fi
+				fi
+			fi
+		fi
+	fi
+fi
+
+ping -W 2 -c 1 $SERVER > /dev/null 2>&1
+if [ $? -ne 0 ]
+then
+	echo "Server $SERVER does not seem to be up. Please check your settings"
+	exit 1
+fi
+
+# CLIENTS1 have standard root login, while CLIENTS2 require iaas login.
+if [ "$SPEED" == "40g" ]
+then
+	CLIENTS1="172.20.232.66 172.20.232.67 172.20.232.90"
+	CLIENTS2=""
+	#CLIENTS1="172.20.232.66 172.20.232.90"
+	#CLIENTS2="10.95.100.11 10.95.100.10"
+else
+	CLIENTS1="172.20.232.66 172.20.232.90"
+	CLIENTS2=""
+	#CLIENTS1="172.20.232.66 172.20.232.67 172.20.232.90"
+	#CLIENTS2="10.95.100.11 10.95.100.10"
+fi
+
+dir=RESULTS/$$/
+mkdir -p $dir
+
+echo
+echo "#####################################################################"
+echo "Testing using clients: $CLIENTS1 $CLIENTS2"
+echo "Command: ab -k -n $NREQUESTS -c $NCONCURRENT $http_type://$SERVER:$PORT/$SIZE"
+echo "Server: $http_type://$SERVER:$PORT"
+echo "Number of requests: $NREQUESTS"
+echo "Concurrent sessions: $NCONCURRENT"
+echo "I/O size: $SIZE"
+echo "Time: $TIME"
+echo "Ethernet speed: $SPEED"
+echo "Iterations: $ITERS"
+echo "#####################################################################"
+echo
+
+# Total time to run, including performance script
+TOTAL_TIME=`expr $TIME \* $ITERS`
+#TOTAL_TIME=`expr $TOTAL_TIME + 1`
+
+# Create a performance measure script on SERVER
+cat > /tmp/perf.$$ << EOF
+procs=\`ps -eFf | grep -w haproxy | grep -v grep | awk '{print \$7}' | tr '\n' ','\`
+mpstat -u -P \$procs $TOTAL_TIME 1 | grep Average > /tmp/cpu-util 2>&1
+EOF
+chmod a+rx /tmp/perf.$$
+
+# Create a test template
+cat > /tmp/ab.$$ << EOF
+rm -f /tmp/ab-results*
+for i in \`seq 1 $ITERS\`
+do
+	ab -k -n $NREQUESTS -c $NCONCURRENT $http_type://$SERVER:$PORT/$SIZE > /tmp/ab-results.\$i 2>&1 &
+	ab_pid=\$!
+
+	sleep $TIME
+	kill -2 \$ab_pid
+	sleep 0.1
+done
+EOF
+chmod a+rx /tmp/ab.$$
+
+echo "Creating test script on all test clients:"
+for host in $CLIENTS1
+do
+	echo -n "	$host: ... "
+	scp -q /tmp/ab.$$ $host:/tmp/my_ab
+	echo "Done"
+done
+
+for host in $CLIENTS2
+do
+	echo -n "	$host: ... "
+	scp -q /tmp/ab.$$ iaas@$host:/tmp/my_ab
+	echo "Done"
+done
+rm -f /tmp/ab.$$
+
+echo
+echo -n "Creating performance measurement script on $SERVER: "
+scp -q /tmp/perf.$$ $SERVER:/tmp/my_perf
+echo "Done"
+
+echo
+echo -n "Starting tests on clients $CLIENTS1 $CLIENTS2: "
+echo "Done"
+
+for host in $CLIENTS1
+do
+	ssh $host /tmp/my_ab &
+done
+
+for host in $CLIENTS2
+do
+	ssh iaas@$host /tmp/my_ab &
+done
+
+echo
+echo -n "Starting performance measurement tool on $SERVER: "
+ssh $SERVER /tmp/my_perf &
+echo "Done"
+
+echo
+echo -n "Tests started, waiting for $TOTAL_TIME seconds: "
+sleep $TOTAL_TIME
+
+# Sometimes kill takes longer to finish and output results, so give time.
+sleep 6
+echo "Done"
+echo
+
+echo -n "Retrieving results from clients: "
+for host in $CLIENTS1
+do
+	ssh $host "cat /tmp/ab-results.*" > $dir/output.`echo $host | cut -d. -f4`
+done
+for host in $CLIENTS2
+do
+	ssh iaas@$host "cat /tmp/ab-results.*" > $dir/output.`echo $host | cut -d. -f4`
+done
+echo "Done"
+
+# Uncomment below to debug
+# egrep "Requests per second|Transfer rate" $dir/*
+
+expected=`echo $CLIENTS1 $CLIENTS2 | wc -w`
+expected=`echo "($expected * 2)" | bc -l`
+expected=`expr $expected \* $ITERS`
+got=`egrep "Requests per second|Transfer rate" $dir/* | wc -l`
+
+if [ $got != $expected ]
+then
+	echo -n "Expected $expected results, but got $got - "
+	echo "results may be incomplete"
+fi
+
+list=`egrep -h "Requests per second" $dir/* | awk '{print $4}' | tr '\n' '+' | sed 's/+$//'`
+
+echo
+echo -n "Requests per second:	$list = "
+sum=$(my_add `egrep -h "Requests per second" $dir/* | awk '{print $4}'`)
+sum=`echo "scale=2; ($sum / $ITERS)" | bc -l`
+echo "$sum #/s"
+
+list=`egrep -h "Transfer rate" $dir/* | awk '{print $3}' | tr '\n' '+' | sed 's/+$//'`
+echo -n "Bandwidth:		$list = "
+sum=$(my_add `egrep -h "Transfer rate" $dir/* | awk '{print $3}'`)
+sum=`echo "scale=2; ($sum / $ITERS)" | bc -l`
+summ=`echo "scale=2; ($sum*8/1024)" | bc -l`
+sumg=`echo "scale=2; ($summ/1024)" | bc -l`
+
+echo "$sum Kb/s"
+echo "		($summ Mb/s, or $sumg Gb/s)"
+
+if [ "$SPEED" == "10g" ]
+then
+	if [ $(echo " $sumg >= 10" | bc -l) -eq 1 ]
+	then 
+		echo "Tests unsynchronized - BW >= 10gbps for a 10g setup"
+	fi
+elif [ $(echo " $sumg >= 40" | bc -l) -eq 1 ]
+then
+	echo "Tests unsynchronized - BW >= 40gbps for a 40g setup"
+fi
+echo
+
+scp -q $SERVER:/tmp/cpu-util /tmp
+if [ $? -eq 0 ]
+then
+	user=$(my_add `awk '{print $3}' /tmp/cpu-util`)
+	sys=$(my_add `awk '{print $5}' /tmp/cpu-util`)
+	irq=$(my_add `awk '{print $7}' /tmp/cpu-util`)
+	soft_irq=$(my_add `awk '{print $8}' /tmp/cpu-util`)
+	idle=$(my_add `awk '{print $12}' /tmp/cpu-util`)
+
+	num=`wc -l /tmp/cpu-util | awk '{print $1}'`
+
+	user=`echo "scale=2; ($user/$num)" | bc -l`
+	sys=`echo "scale=2; ($sys/$num)" | bc -l`
+	irq=`echo "scale=2; ($irq/$num)" | bc -l`
+	soft_irq=`echo "scale=2; ($soft_irq/$num)" | bc -l`
+	idle=`echo "scale=2; ($idle/$num)" | bc -l`
+
+	total=`echo "$user+$sys+$irq+$soft_irq+$idle" | bc -l`
+
+	echo "User: $user% Sys: $sys% IRQ: $irq% Softirq: $soft_irq% Idle: $idle% (Total: $total%)"
+	echo
+else
+	echo "Unable to get performance metrics"
+fi
+
+exit 0

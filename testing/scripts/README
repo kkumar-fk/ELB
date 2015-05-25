@@ -1,0 +1,11 @@
+Use run_test to measure bandwidth, latency, and system utilization
+of haproxy. Run as:
+
+Latency:
+./run_test 172.20.232.67 80 1000000000 900 128 20 10g 3 
+
+BW:
+./run_test 172.20.232.67 80 1000000000 900 128K 20 10g 3 
+
+Usage:
+./run_test Server Port #Requests #Concurrent #I/O-Size Time 10g/40g #Iterations
