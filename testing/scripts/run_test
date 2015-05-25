@@ -48,8 +48,8 @@ then
 	echo -n "Need either atleast 1 argument, or 'auto' to use standard "
 	echo "arguments. Usage: "
 	echo "	$0 auto; or"
-	echo "	$0 server Port #Requests #Concurrent #I/O-Size Time 10g/40g"
-	echo "e.g.:	$0 172.20.232.122 80 1000000 500 64 ; or"
+	echo "	$0 Server Port #Requests #Concurrent #I/O-Size Time 10g/40g #Iterations"
+	echo "e.g.:	$0 172.20.232.122 80 1000000 500 64 30 3; or"
 	echo "	$0 auto"
 	exit 1
 fi
@@ -260,9 +260,12 @@ then
 fi
 echo
 
+sleep 1
+echo -n "Retrieving performance metrics from HAProxy server $SERVER: "
 scp -q $SERVER:/tmp/cpu-util /tmp
 if [ $? -eq 0 ]
 then
+	echo "Done"
 	user=$(my_add `awk '{print $3}' /tmp/cpu-util`)
 	sys=$(my_add `awk '{print $5}' /tmp/cpu-util`)
 	irq=$(my_add `awk '{print $7}' /tmp/cpu-util`)
@@ -282,6 +285,7 @@ then
 	echo "User: $user% Sys: $sys% IRQ: $irq% Softirq: $soft_irq% Idle: $idle% (Total: $total%)"
 	echo
 else
+	echo "Failed"
 	echo "Unable to get performance metrics"
 fi
 
