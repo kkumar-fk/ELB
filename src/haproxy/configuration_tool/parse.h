@@ -48,13 +48,14 @@
 
 #define DEFAULT_MAXCONN		10000
 
+/* Max backends per frontend, due to ACL's */
+#define MAX_BACKENDS		20
+
 /* Input xml file is parsed to a key/value pair array */
 struct xml_data {
 	char key[MAX_VALUE];
 	char value[MAX_VALUE];
 };
-
-#define MAX_BACKENDS		20
 
 /* Structure of a backend configuration */
 struct proxy_backend {
