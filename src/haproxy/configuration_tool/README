@@ -1,2 +1,3 @@
-Sample tool to create haproxy configuration file. This needs to read
-input and save parameters before creating file - TBD.
+Sample tool to create haproxy configuration file. This reads input from
+stdin, and creates/test/starts haproxy. Sample input is kept in the
+file "sample.input".
