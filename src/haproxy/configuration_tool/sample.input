@@ -1,0 +1,95 @@
+# Lines beginning with a hash are comments and ignored. Sections are global,
+# default, frontend(s) and backend(s). They can come in generally any order,
+# however:
+#	- anything related to frontend should finish before details
+#	  of backend for that frontend.
+#	- next frontend can come only after backend section of the
+#	  previous frontend is finished.
+#
+# VIPS-IP-PORT can have multiple ip:port separated by commas,, but all port
+# numbers must have same value.
+{
+	"global-maxconn": "50000",
+	"global-nbproc": "6",
+	"defaults-maxconn": "20000",
+	"defaults-timeout-connect": "5000s",
+	"defaults-timeout-server": "50000s",
+	"defaults-timeout-client": "50000s",
+
+	# Reverse proxy - 1
+	"VIPS-IP-PORT": "172.20.232.1:80",
+	"VIPS-maxconn": "200000",
+
+	"VIPS-server-ip-port": "10.0.0.1:81",
+	"VIPS-server-name": "nginx-1",
+	"VIPS-server-maxconn" : "200",
+
+	"VIPS-server-ip-port": "10.0.0.2:82",
+	"VIPS-server-name": "nginx-2",
+	"VIPS-server-maxconn" : "300",
+
+	# Reverse proxy - 2
+	"VIPS-IP-PORT": "172.20.232.2:80",
+	"VIPS-maxconn": "350000",
+
+	"VIPS-server-ip-port": "10.0.0.3:81",
+	"VIPS-server-name": "nginx-3",
+	"VIPS-server-maxconn" : "400",
+
+	"VIPS-server-ip-port": "10.0.0.4:82",
+	"VIPS-server-name": "nginx-4",
+	"VIPS-server-maxconn" : "500",
+
+	"VIPS-server-ip-port": "10.0.0.5:82",
+	"VIPS-server-name": "nginx-5",
+	"VIPS-server-maxconn" : "600"
+
+	# Reverse proxy - 3 (SSL)
+	"VIPS-IP-PORT": "172.20.232.202:443",
+	"VIPS-maxconn": "3500",
+
+	"VIPS-server-ip-port": "10.0.0.100:80",
+	"VIPS-server-name": "nginx-ssl-1",
+	"VIPS-server-maxconn" : "400",
+
+	"VIPS-server-ip-port": "10.0.0.101:80",
+	"VIPS-server-name": "nginx-ssl-2",
+	"VIPS-server-maxconn" : "500",
+
+	"VIPS-server-ip-port": "10.0.0.102:80",
+	"VIPS-server-name": "nginx-ssl-3",
+	"VIPS-server-maxconn" : "600"
+
+	# Forward proxy - 1
+	"VIPS-IP-PORT": "172.20.232.3:45,172.20.232.4:45",
+	"VIPS-maxconn": "11000",
+
+	"VIPS-server-ip-port": "60.12.40.1:8200",
+	"VIPS-server-src-ip-port": "192.168.122.50:10001-20000",
+	"VIPS-server-name": "google-1.co.in",
+	"VIPS-server-maxconn" : "2200",
+
+	"VIPS-server-ip-port": "60.12.40.2:8200",
+	"VIPS-server-src-ip-port": "192.168.122.51:20001-30000",
+	"VIPS-server-name": "google-2.co.in",
+	"VIPS-server-maxconn" : "3300",
+
+	# Forward proxy - 2
+	"VIPS-IP-PORT": "172.20.232.4:144,172.20.232.4:144",
+	"VIPS-maxconn": "11500",
+
+	"VIPS-server-ip-port": "60.12.40.3:12500",
+	"VIPS-server-src-ip-port": "192.168.122.51:10001-20000",
+	"VIPS-server-name": "flipkart-1.com",
+	"VIPS-server-maxconn" : "12200",
+
+	"VIPS-server-ip-port": "60.12.40.4:12500",
+	"VIPS-server-src-ip-port": "192.168.122.52:10001-20000",
+	"VIPS-server-name": "flipkart-2.com",
+	"VIPS-server-maxconn" : "12300",
+
+	"VIPS-server-ip-port": "60.12.40.5:13500",
+	"VIPS-server-src-ip-port": "192.168.122.53:10001-20000",
+	"VIPS-server-name": "flipkart-3.com",
+	"VIPS-server-maxconn" : "12400",
+}
