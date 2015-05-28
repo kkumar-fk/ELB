@@ -10,8 +10,6 @@
 static struct proxy_frontend frontends[MAX_FRONTENDS];
 static struct xml_data xml_input[MAX_LINES];
 static int frontend_count = 0;
-static int forward_frontend_num = 1, forward_backend_num = 1;
-static int reverse_frontend_num = 1, reverse_backend_num = 1;
 static int max_input_lines;
 static int nbproc, set_ssl_params;
 
@@ -263,9 +261,8 @@ void write_frontend_reverse(FILE *fp, char *type, int index)
 {
 	int i;
 
-	fprintf(fp, "# Reverse proxy Frontend section %d\n",
-		reverse_frontend_num);
-	fprintf(fp, "frontend www-http-%s-%d\n", type, reverse_frontend_num);
+	fprintf(fp, "# Reverse proxy frontend \n");
+	fprintf(fp, "frontend %s\n", frontends[index].vip_frontend_name);
 
 	write_bind_lines(fp, index);
 
@@ -274,17 +271,16 @@ void write_frontend_reverse(FILE *fp, char *type, int index)
 
 	save_stats_once(fp);
 
-	fprintf(fp, "\tdefault_backend www-backend-%s-%d\n\n",
-		type, reverse_frontend_num++);
+	fprintf(fp, "\tdefault_backend %s\n\n",
+		frontends[index].vip_backend.vip_backend_names[0]);
 }
 
 void write_frontend_forward(FILE *fp, char *type, int index)
 {
 	int i;
 
-	fprintf(fp, "# Forward proxy Frontend section %d\n",
-		forward_frontend_num);
-	fprintf(fp, "frontend www-http-%s-%d\n", type, forward_frontend_num);
+	fprintf(fp, "# Forward proxy frontend \n");
+	fprintf(fp, "frontend %s\n", frontends[index].vip_frontend_name);
 
 	write_bind_lines(fp, index);
 
@@ -293,17 +289,18 @@ void write_frontend_forward(FILE *fp, char *type, int index)
 
 	save_stats_once(fp);
 
-	fprintf(fp, "\tdefault_backend www-backend-%s-%d\n\n",
-		type, forward_frontend_num++);
+	fprintf(fp, "\tdefault_backend %s\n\n",
+		frontends[index].vip_backend.vip_backend_names[0]);
 }
 
 void write_backend_reverse(FILE *fp, char *type, int index)
 {
 	int i;
 
-	fprintf(fp, "# Reverse proxy Backend section %d\n",
-		reverse_backend_num);
-	fprintf(fp, "backend www-backend-%s-%d\n", type, reverse_backend_num++);
+	fprintf(fp, "# Reverse proxy backend \n");
+	fprintf(fp, "backend %s\n",
+		frontends[index].vip_backend.vip_backend_names[0]);
+
 	fprintf(fp, "\tmode http\n");
 	fprintf(fp, "\tbalance roundrobin\n");
 	fprintf(fp, "\toption forwardfor\n");
@@ -321,9 +318,10 @@ void write_backend_forward(FILE *fp, char *type, int index)
 {
 	int i;
 
-	fprintf(fp, "# Forward proxy Backend section %d\n",
-		forward_backend_num);
-	fprintf(fp, "backend www-backend-%s-%d\n", type, forward_backend_num++);
+	fprintf(fp, "# Forward proxy backend \n");
+	fprintf(fp, "backend %s\n",
+		frontends[index].vip_backend.vip_backend_names[0]);
+
 	fprintf(fp, "\tmode http\n");
 	fprintf(fp, "\tbalance roundrobin\n");
 	fprintf(fp, "\toption forwardfor\n");
@@ -456,6 +454,9 @@ int save_one_entry_info(int xml_index)
 	int i = frontend_count;
 	int serv_num = -1;
 	int type = -1;
+	int is_forward = 0;
+	static int fcounter = 1, bcounter = 1;
+char name[MAX_LEN];	/* Not required, use directly */
 
 	initialize_entry(xml_index);
 
@@ -494,10 +495,25 @@ int save_one_entry_info(int xml_index)
 			 * should come after server-ip.
 			 */
 			frontends[frontend_count].vip_backend.is_forward = 1;
+			is_forward = 1;
 			strcpy(frontends[frontend_count].\
 				vip_backend.vip_forward_ips[serv_num],
 				xml_input[xml_index].value);
 		}
+	}
+
+	if (is_forward) {
+		sprintf(frontends[frontend_count].vip_frontend_name,
+			"frontend-%s-%d", "forward", fcounter);
+		sprintf(frontends[frontend_count].vip_backend.\
+			vip_backend_names[0], "backend-%s-%d",
+			"forward", fcounter++);
+	} else {
+		sprintf(frontends[frontend_count].vip_frontend_name,
+			"frontend-%s-%d", "reverse", bcounter);
+		sprintf(frontends[frontend_count].vip_backend.\
+			vip_backend_names[0], "backend-%s-%d",
+			"reverse", bcounter++);
 	}
 
 	frontends[frontend_count].vip_backend.num_servers = serv_num + 1;

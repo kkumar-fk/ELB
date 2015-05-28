@@ -54,6 +54,8 @@ struct xml_data {
 	char value[MAX_VALUE];
 };
 
+#define MAX_BACKENDS		20
+
 /* Structure of a backend configuration */
 struct proxy_backend {
 	int			num_servers;
@@ -62,6 +64,7 @@ struct proxy_backend {
 	char			vip_server_name[MAX_SERVERS][MAX_LEN];
 	int			vip_server_maxconn[MAX_SERVERS];
 	char			vip_forward_ips[MAX_SERVERS][MAX_LEN];
+	char			vip_backend_names[MAX_BACKENDS][MAX_LEN];
 };
 
 
@@ -70,6 +73,7 @@ struct proxy_frontend {
 	char			vip_ips[MAX_LEN];
 	int			vip_port;
 	int			vip_maxconn;
+	char			vip_frontend_name[MAX_LEN];
 	struct proxy_backend	vip_backend;
 };
 
