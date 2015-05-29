@@ -57,6 +57,9 @@ struct xml_data {
 	char value[MAX_VALUE];
 };
 
+#define	MAX_ACLS		2
+#define MAX_ACL_LEN		256
+
 /* Structure of a backend configuration */
 struct proxy_backend {
 	int			num_servers;
@@ -65,7 +68,7 @@ struct proxy_backend {
 	char			vip_server_name[MAX_SERVERS][MAX_LEN];
 	int			vip_server_maxconn[MAX_SERVERS];
 	char			vip_forward_ips[MAX_SERVERS][MAX_LEN];
-	char			vip_backend_names[MAX_BACKENDS][MAX_LEN];
+	char			vip_backend_name[MAX_LEN];
 };
 
 
@@ -74,17 +77,27 @@ struct proxy_frontend {
 	char			vip_ips[MAX_LEN];
 	int			vip_port;
 	int			vip_maxconn;
+	int			num_acls;
 	char			vip_frontend_name[MAX_LEN];
+	char			vip_acls[MAX_ACLS][MAX_ACL_LEN];
 	struct proxy_backend	vip_backend;
 };
 
+/* Pattern for ACL beginning prefix */
+#define ACL_START_PREFIX		"ACL"
+
 /* List of special commands present in the configuration file */
 #define VIP_IP_PORT			"VIPS-IP-PORT"
+#define VIP_MAX_CONN			"VIPS-maxconn"
 #define NBPROC				"global-nbproc"
 #define GLOBAL_MAXCONN			"global-maxconn"
 #define DEFAULTS_MAXCONN		"defaults-maxconn"
 #define DEFAULT_TIMEOUT_CONNECT		"defaults-timeout-connect"
 #define DEFAULT_TIMEOUT_CLIENT		"defaults-timeout-client"
 #define DEFAULT_TIMEOUT_SERVER		"defaults-timeout-server"
+#define VIPS_SERVER_IP_PORT		"VIPS-server-ip-port"
+#define VIPS_SERVER_NAME		"VIPS-server-name"
+#define VIPS_SERVER_MAXCONN		"VIPS-server-maxconn"
+#define VIPS_SERVER_SRC_IP_PORT		"VIPS-server-src-ip-port"
 
 #endif

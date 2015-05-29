@@ -82,6 +82,7 @@ int get_port_no(char *start, char *end)
 	char s[5];
 
 	strncpy(s, start, min(sizeof(s), end - start));
+	/* TODO: Add a zero at end, strncpy does not null terminate */
 	return atoi(s);
 }
 
@@ -257,9 +258,33 @@ void write_bind_lines(FILE *fp, int index)
 	}
 }
 
+char *string_till_delim(char *string, int how_many)
+{
+	int i = 0;
+
+	do {
+		char *end = strchr(string, ';');
+
+		if (!end)
+			return NULL;
+
+		if (++i == how_many) {
+			char tmp[100];
+
+			strncpy(tmp, string, end - string);
+			tmp[end-string] = 0;
+			return strdup(tmp);
+		}
+		string = end + 1;
+	} while (1);
+
+	return NULL;
+}
+
 void write_frontend_reverse(FILE *fp, char *type, int index)
 {
 	int i;
+	char counter = 1;
 
 	fprintf(fp, "# Reverse proxy frontend \n");
 	fprintf(fp, "frontend %s\n", frontends[index].vip_frontend_name);
@@ -269,10 +294,26 @@ void write_frontend_reverse(FILE *fp, char *type, int index)
 	fprintf(fp, "\tmode http\n");
 	fprintf(fp, "\tmaxconn %d\n", frontends[index].vip_maxconn);
 
+	for (i = 0; i < frontends[index].num_acls; i++) {
+		char *cmd = string_till_delim(frontends[index].vip_acls[i], 1);
+
+		if (!strcmp(cmd, "URLBEG")) {
+			char *next = string_till_delim(frontends[index].\
+							vip_acls[i], 2);
+
+			fprintf(fp, "\tacl ACL_%d url_beg %s\n",
+				counter, next);
+			fprintf(fp, "\tuse_backend %s_acl_%d if ACL_%d\n",
+				frontends[index].vip_backend.\
+				vip_backend_name, counter, counter);
+			counter++;
+		}
+	}
+
 	save_stats_once(fp);
 
 	fprintf(fp, "\tdefault_backend %s\n\n",
-		frontends[index].vip_backend.vip_backend_names[0]);
+		frontends[index].vip_backend.vip_backend_name);
 }
 
 void write_frontend_forward(FILE *fp, char *type, int index)
@@ -290,28 +331,69 @@ void write_frontend_forward(FILE *fp, char *type, int index)
 	save_stats_once(fp);
 
 	fprintf(fp, "\tdefault_backend %s\n\n",
-		frontends[index].vip_backend.vip_backend_names[0]);
+		frontends[index].vip_backend.vip_backend_name);
 }
 
 void write_backend_reverse(FILE *fp, char *type, int index)
 {
+	int counter = 1;
 	int i;
 
 	fprintf(fp, "# Reverse proxy backend \n");
 	fprintf(fp, "backend %s\n",
-		frontends[index].vip_backend.vip_backend_names[0]);
+		frontends[index].vip_backend.vip_backend_name);
 
 	fprintf(fp, "\tmode http\n");
 	fprintf(fp, "\tbalance roundrobin\n");
 	fprintf(fp, "\toption forwardfor\n");
 	fprintf(fp, "\tcookie FKSID prefix indirect nocache\n");
+
 	for (i = 0; i < frontends[index].vip_backend.num_servers; i++) {
 		fprintf(fp, "\tserver %s %s maxconn %d check\n",
-		frontends[index].vip_backend.vip_server_name[i],
-		frontends[index].vip_backend.vip_server_ips[i],
-		frontends[index].vip_backend.vip_server_maxconn[i]);
+			frontends[index].vip_backend.vip_server_name[i],
+			frontends[index].vip_backend.vip_server_ips[i],
+			frontends[index].vip_backend.vip_server_maxconn[i]);
 	}
 	fprintf(fp, "\n");
+
+	for (i = 0; i < frontends[index].num_acls; i++) {
+		char *cmd = string_till_delim(frontends[index].vip_acls[i], 1);
+
+		if (!strcmp(cmd, "URLBEG")) {
+			char *string = frontends[index].vip_acls[i];
+			int j;
+
+			fprintf(fp, "# Reverse proxy frontend for acl_%d\n",
+				counter);
+
+			fprintf(fp, "backend %s_acl_%d\n", frontends[index].\
+				vip_backend.vip_backend_name,
+				counter);
+			fprintf(fp, "\tmode http\n");
+			fprintf(fp, "\tbalance roundrobin\n");
+			fprintf(fp, "\toption forwardfor\n");
+			fprintf(fp, "\tcookie FKSID prefix indirect nocache\n");
+
+			/* Need to add :port to the IP- string */
+			for (j = 3; ; j++) {
+				char *next = string_till_delim(string, j);
+				char *end;
+
+				if (!next)
+					break;
+				if (strncmp(next, "IP-", strlen("IP-")))
+					continue;
+
+				next += strlen("IP-");
+				fprintf(fp, "\tserver %s-acl-%d %s check\n",
+					frontends[index].vip_backend.\
+					vip_server_name[i], counter, next);
+			}
+
+			counter++;
+		}
+		fprintf(fp, "\n");
+	}
 }
 
 void write_backend_forward(FILE *fp, char *type, int index)
@@ -320,7 +402,7 @@ void write_backend_forward(FILE *fp, char *type, int index)
 
 	fprintf(fp, "# Forward proxy backend \n");
 	fprintf(fp, "backend %s\n",
-		frontends[index].vip_backend.vip_backend_names[0]);
+		frontends[index].vip_backend.vip_backend_name);
 
 	fprintf(fp, "\tmode http\n");
 	fprintf(fp, "\tbalance roundrobin\n");
@@ -435,6 +517,7 @@ void initialize_entry(int xml_index)
 		frontends[frontend_count].vip_ips[0] = 0;
 		frontends[frontend_count].vip_maxconn = 1000;
 		frontends[frontend_count].vip_backend.num_servers = 0;
+		frontends[frontend_count].num_acls = 0;
 		for (j = 0; j < MAX_SERVERS; j++) {
 			frontends[frontend_count].vip_backend.\
 				vip_server_ips[j][0] = 0;
@@ -451,72 +534,87 @@ void initialize_entry(int xml_index)
 int save_one_entry_info(int xml_index)
 {
 	int next_entry = -1;
-	int i = frontend_count;
+	int fec = frontend_count;
 	int serv_num = -1;
-	int type = -1;
 	int is_forward = 0;
 	static int fcounter = 1, bcounter = 1;
-char name[MAX_LEN];	/* Not required, use directly */
+	int num_acls = -1;
 
 	initialize_entry(xml_index);
 
-	strcpy(frontends[i].vip_ips, xml_input[xml_index].value);
-	frontends[i].vip_port = validate_ip_port(frontends[i].vip_ips);
-	if (frontends[i].vip_port == -1) {
+	strcpy(frontends[fec].vip_ips, xml_input[xml_index].value);
+	frontends[fec].vip_port = validate_ip_port(frontends[fec].vip_ips);
+	if (frontends[fec].vip_port == -1) {
 		fprintf(stderr, "%s: Bad ip/port combination\n",
-			frontends[i].vip_ips);
+			frontends[fec].vip_ips);
 		exit(1);
 	}
 
-	if (frontends[i].vip_port == SSL_PORT)
+	if (frontends[fec].vip_port == SSL_PORT)
 		set_ssl_params = 1;
 
 	while (++xml_index < max_input_lines) {
-		if (!strcmp(xml_input[xml_index].key, "VIPS-IP-PORT")) {
+		if (!strcmp(xml_input[xml_index].key, VIP_IP_PORT)) {
 			next_entry = xml_index;
 			break;
-		} else if (!strcmp(xml_input[xml_index].key, "VIPS-maxconn")) {
-			frontends[i].vip_maxconn =
+		} else if (!strcmp(xml_input[xml_index].key, VIP_MAX_CONN)) {
+			frontends[fec].vip_maxconn =
 				atoi(xml_input[xml_index].value);
-		} else if (!strcmp(xml_input[xml_index].key, "VIPS-server-ip-port")) {
-			strcpy(frontends[frontend_count].\
+		} else if (!strcmp(xml_input[xml_index].key,
+				   VIPS_SERVER_IP_PORT)) {
+			strcpy(frontends[fec].\
 				vip_backend.vip_server_ips[++serv_num],
 				xml_input[xml_index].value);
-		} else if (!strcmp(xml_input[xml_index].key, "VIPS-server-name")) {
-			strcpy(frontends[frontend_count].vip_backend.\
+		} else if (!strcmp(xml_input[xml_index].key,
+				   VIPS_SERVER_NAME)) {
+			strcpy(frontends[fec].vip_backend.\
 				vip_server_name[serv_num],
 				xml_input[xml_index].value);
-		} else if (!strcmp(xml_input[xml_index].key, "VIPS-server-maxconn")) {
-			frontends[frontend_count].vip_backend.\
+		} else if (!strcmp(xml_input[xml_index].key,
+				   VIPS_SERVER_MAXCONN)) {
+			frontends[fec].vip_backend.\
 				vip_server_maxconn[serv_num] = \
 				atoi(xml_input[xml_index].value);
-		} else if (!strcmp(xml_input[xml_index].key, "VIPS-server-src-ip-port")) {
+		} else if (!strcmp(xml_input[xml_index].key,
+				   VIPS_SERVER_SRC_IP_PORT)) {
 			/* Currently order of forward-src-ip is important, it
 			 * should come after server-ip.
 			 */
-			frontends[frontend_count].vip_backend.is_forward = 1;
+			frontends[fec].vip_backend.is_forward = 1;
 			is_forward = 1;
-			strcpy(frontends[frontend_count].\
+			strcpy(frontends[fec].\
 				vip_backend.vip_forward_ips[serv_num],
 				xml_input[xml_index].value);
+		} else if (!strncmp(xml_input[xml_index].key, ACL_START_PREFIX,
+				    strlen(ACL_START_PREFIX))) {
+			if (num_acls < MAX_ACLS - 1) {
+				strcpy(frontends[fec].vip_acls[++num_acls],
+					xml_input[xml_index].value);
+			} else {
+				fprintf(stderr, "Too many acl's (max %d)\n",
+					MAX_ACLS);
+				exit(1);
+			}
 		}
 	}
 
+	frontends[fec].num_acls = num_acls + 1;
+
 	if (is_forward) {
-		sprintf(frontends[frontend_count].vip_frontend_name,
+		sprintf(frontends[fec].vip_frontend_name,
 			"frontend-%s-%d", "forward", fcounter);
-		sprintf(frontends[frontend_count].vip_backend.\
-			vip_backend_names[0], "backend-%s-%d",
+		sprintf(frontends[fec].vip_backend.\
+			vip_backend_name, "backend-%s-%d",
 			"forward", fcounter++);
 	} else {
-		sprintf(frontends[frontend_count].vip_frontend_name,
+		sprintf(frontends[fec].vip_frontend_name,
 			"frontend-%s-%d", "reverse", bcounter);
-		sprintf(frontends[frontend_count].vip_backend.\
-			vip_backend_names[0], "backend-%s-%d",
+		sprintf(frontends[fec].vip_backend.\
+			vip_backend_name, "backend-%s-%d",
 			"reverse", bcounter++);
 	}
 
-	frontends[frontend_count].vip_backend.num_servers = serv_num + 1;
+	frontends[fec].vip_backend.num_servers = serv_num + 1;
 	frontend_count++;
 
 	/* Whether more VIP's are present or not */
@@ -528,8 +626,13 @@ void save_fe_be(void)
 	int index;
 
 	index = look_for_param(VIP_IP_PORT);
-	while (index != -1)
+	while (index != -1) {
+		/*
+		 * Save a full entry till next VIP_IP_PORT, get that entry's
+		 * index.
+		 */
 		index = save_one_entry_info(index);
+	}
 }
 
 int is_forward_proxy(int index)
@@ -541,7 +644,7 @@ void configure_fe_be(FILE *fp)
 {
 	int i;
 
-	/* Write frontends */
+	/* Write all frontends */
 	for (i = 0; i < frontend_count; i++) {
 		if (is_forward_proxy(i))
 			write_frontend_forward(fp, "forward", i);
@@ -549,7 +652,7 @@ void configure_fe_be(FILE *fp)
 			write_frontend_reverse(fp, "reverse", i);
 	}
 
-	/* Write backends */
+	/* followed by all backends */
 	for (i = 0; i < frontend_count; i++) {
 		if (is_forward_proxy(i))
 			write_backend_forward(fp, "forward", i);
