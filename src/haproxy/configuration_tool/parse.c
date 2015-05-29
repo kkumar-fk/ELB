@@ -281,18 +281,11 @@ char *string_till_delim(char *string, int how_many)
 	return NULL;
 }
 
-void write_frontend_reverse(FILE *fp, char *type, int index)
+/* Parse ACL rules and create haproxy configuration lines for the frontend*/
+void write_acl_info_fe(FILE *fp, int index)
 {
+	int counter = 1;
 	int i;
-	char counter = 1;
-
-	fprintf(fp, "# Reverse proxy frontend \n");
-	fprintf(fp, "frontend %s\n", frontends[index].vip_frontend_name);
-
-	write_bind_lines(fp, index);
-
-	fprintf(fp, "\tmode http\n");
-	fprintf(fp, "\tmaxconn %d\n", frontends[index].vip_maxconn);
 
 	for (i = 0; i < frontends[index].num_acls; i++) {
 		char *cmd = string_till_delim(frontends[index].vip_acls[i], 1);
@@ -309,6 +302,20 @@ void write_frontend_reverse(FILE *fp, char *type, int index)
 			counter++;
 		}
 	}
+}
+
+void write_frontend_reverse(FILE *fp, char *type, int index)
+{
+	fprintf(fp, "# Reverse proxy frontend \n");
+	fprintf(fp, "frontend %s\n", frontends[index].vip_frontend_name);
+
+	write_bind_lines(fp, index);
+
+	fprintf(fp, "\tmode http\n");
+	fprintf(fp, "\tmaxconn %d\n", frontends[index].vip_maxconn);
+
+	/* Create rules for all ACL's */
+	write_acl_info_fe(fp, index);
 
 	save_stats_once(fp);
 
@@ -318,8 +325,6 @@ void write_frontend_reverse(FILE *fp, char *type, int index)
 
 void write_frontend_forward(FILE *fp, char *type, int index)
 {
-	int i;
-
 	fprintf(fp, "# Forward proxy frontend \n");
 	fprintf(fp, "frontend %s\n", frontends[index].vip_frontend_name);
 
@@ -328,33 +333,20 @@ void write_frontend_forward(FILE *fp, char *type, int index)
 	fprintf(fp, "\tmode tcp\n");
 	fprintf(fp, "\tmaxconn %d\n", frontends[index].vip_maxconn);
 
+	/* Create rules for all ACL's */
+	write_acl_info_fe(fp, index);
+
 	save_stats_once(fp);
 
 	fprintf(fp, "\tdefault_backend %s\n\n",
 		frontends[index].vip_backend.vip_backend_name);
 }
 
-void write_backend_reverse(FILE *fp, char *type, int index)
+/* Parse ACL rules and create haproxy configuration lines for the backend */
+void write_acl_info_be(FILE *fp, int index)
 {
 	int counter = 1;
 	int i;
-
-	fprintf(fp, "# Reverse proxy backend \n");
-	fprintf(fp, "backend %s\n",
-		frontends[index].vip_backend.vip_backend_name);
-
-	fprintf(fp, "\tmode http\n");
-	fprintf(fp, "\tbalance roundrobin\n");
-	fprintf(fp, "\toption forwardfor\n");
-	fprintf(fp, "\tcookie FKSID prefix indirect nocache\n");
-
-	for (i = 0; i < frontends[index].vip_backend.num_servers; i++) {
-		fprintf(fp, "\tserver %s %s maxconn %d check\n",
-			frontends[index].vip_backend.vip_server_name[i],
-			frontends[index].vip_backend.vip_server_ips[i],
-			frontends[index].vip_backend.vip_server_maxconn[i]);
-	}
-	fprintf(fp, "\n");
 
 	for (i = 0; i < frontends[index].num_acls; i++) {
 		char *cmd = string_till_delim(frontends[index].vip_acls[i], 1);
@@ -396,6 +388,31 @@ void write_backend_reverse(FILE *fp, char *type, int index)
 	}
 }
 
+void write_backend_reverse(FILE *fp, char *type, int index)
+{
+	int counter = 1;
+	int i;
+
+	fprintf(fp, "# Reverse proxy backend \n");
+	fprintf(fp, "backend %s\n",
+		frontends[index].vip_backend.vip_backend_name);
+
+	fprintf(fp, "\tmode http\n");
+	fprintf(fp, "\tbalance roundrobin\n");
+	fprintf(fp, "\toption forwardfor\n");
+	fprintf(fp, "\tcookie FKSID prefix indirect nocache\n");
+
+	for (i = 0; i < frontends[index].vip_backend.num_servers; i++) {
+		fprintf(fp, "\tserver %s %s maxconn %d check\n",
+			frontends[index].vip_backend.vip_server_name[i],
+			frontends[index].vip_backend.vip_server_ips[i],
+			frontends[index].vip_backend.vip_server_maxconn[i]);
+	}
+
+	fprintf(fp, "\n");
+	write_acl_info_be(fp, index);
+}
+
 void write_backend_forward(FILE *fp, char *type, int index)
 {
 	int i;
@@ -415,7 +432,9 @@ void write_backend_forward(FILE *fp, char *type, int index)
 		frontends[index].vip_backend.vip_forward_ips[i],
 		frontends[index].vip_backend.vip_server_maxconn[i]);
 	}
+
 	fprintf(fp, "\n");
+	write_acl_info_be(fp, index);
 }
 
 void write_global_default_userlist(FILE *fp, int numcpus)
