@@ -342,6 +342,29 @@ void write_frontend_forward(FILE *fp, char *type, int index)
 		frontends[index].vip_backend.vip_backend_name);
 }
 
+/* Same as string_till_delim, but uses ':', and handles string not ending
+ * in ';' as earlier. Need to fix that, and use same function.
+ */
+char *get_subcomponent(char *start, int how_many)
+{
+	int i = 0;
+
+	do {
+		char *end = strchr(start, ':');
+
+		if (++i == how_many) {
+			char tmp[100];
+
+			if (!end)
+				return strdup(start);
+			strncpy(tmp, start, end - start);
+			tmp[end-start] = 0;
+			return strdup(tmp);
+		}
+		start = end + 1;
+	} while (1);
+}
+
 /* Parse ACL rules and create haproxy configuration lines for the backend */
 void write_acl_info_be(FILE *fp, int index)
 {
@@ -349,13 +372,14 @@ void write_acl_info_be(FILE *fp, int index)
 	int i;
 
 	for (i = 0; i < frontends[index].num_acls; i++) {
+		int server_counter = 1;
 		char *cmd = string_till_delim(frontends[index].vip_acls[i], 1);
 
 		if (!strcmp(cmd, "URLBEG")) {
 			char *string = frontends[index].vip_acls[i];
 			int j;
 
-			fprintf(fp, "# Reverse proxy frontend for acl_%d\n",
+			fprintf(fp, "# Reverse proxy backend for acl_%d\n",
 				counter);
 
 			fprintf(fp, "backend %s_acl_%d\n", frontends[index].\
@@ -366,10 +390,9 @@ void write_acl_info_be(FILE *fp, int index)
 			fprintf(fp, "\toption forwardfor\n");
 			fprintf(fp, "\tcookie FKSID prefix indirect nocache\n");
 
-			/* Need to add :port to the IP- string */
 			for (j = 3; ; j++) {
 				char *next = string_till_delim(string, j);
-				char *end;
+				char *ip, *port, *maxconn;
 
 				if (!next)
 					break;
@@ -377,9 +400,13 @@ void write_acl_info_be(FILE *fp, int index)
 					continue;
 
 				next += strlen("IP-");
-				fprintf(fp, "\tserver %s-acl-%d %s check\n",
+				ip = get_subcomponent(next, 1);
+				port = get_subcomponent(next, 2);
+				maxconn = get_subcomponent(next, 3);
+				fprintf(fp, "\tserver %s-acl-%d-%d %s:%s maxconn %s check\n",
 					frontends[index].vip_backend.\
-					vip_server_name[i], counter, next);
+					vip_server_name[i], counter,
+					server_counter++, ip, port, maxconn);
 			}
 
 			counter++;
