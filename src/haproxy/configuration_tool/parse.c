@@ -290,15 +290,16 @@ void write_acl_info_fe(FILE *fp, int index)
 	for (i = 0; i < frontends[index].num_acls; i++) {
 		char *cmd = string_till_delim(frontends[index].vip_acls[i], 1);
 
-		if (!strcmp(cmd, "URLBEG")) {
+		if (!strncmp(cmd, URLBEG, strlen(URLBEG))) {
 			char *next = string_till_delim(frontends[index].\
 							vip_acls[i], 2);
+			char *acl = !strcmp(cmd, URLBEG) ? "ACL" : "!ACL";
 
 			fprintf(fp, "\tacl ACL_%d url_beg %s\n",
 				counter, next);
-			fprintf(fp, "\tuse_backend %s_acl_%d if ACL_%d\n",
+			fprintf(fp, "\tuse_backend %s_acl_%d if %s_%d\n",
 				frontends[index].vip_backend.\
-				vip_backend_name, counter, counter);
+				vip_backend_name, counter, acl, counter);
 			counter++;
 		}
 	}
@@ -375,7 +376,7 @@ void write_acl_info_be(FILE *fp, int index)
 		int server_counter = 1;
 		char *cmd = string_till_delim(frontends[index].vip_acls[i], 1);
 
-		if (!strcmp(cmd, "URLBEG")) {
+		if (!strncmp(cmd, URLBEG, strlen(URLBEG))) {
 			char *string = frontends[index].vip_acls[i];
 			int j;
 

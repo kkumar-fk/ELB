@@ -20,7 +20,7 @@
 	"VIPS-IP-PORT": "172.20.232.1:80",
 	"VIPS-maxconn": "200000",
 	"ACL" : "URLBEG;/app/;IP-21.2.2.10:80:2200;IP-21.2.2.11:80:2300;IP-21.2.2.12:80:2400;",
-	"ACL" : "URLBEG;/images/;IP-21.2.2.20:80:3200;IP-21.2.2.21:80:3300;IP-21.2.2.22:80:3400;",
+	"ACL" : "URLBEG-NOT;/images/;IP-21.2.2.20:80:3200;IP-21.2.2.21:80:3300;IP-21.2.2.22:80:3400;",
 
 	"VIPS-server-ip-port": "10.0.0.1:81",
 	"VIPS-server-name": "nginx-1",
@@ -33,7 +33,7 @@
 	# Reverse proxy - 2
 	"VIPS-IP-PORT": "172.20.232.2:80",
 	"VIPS-maxconn": "350000",
-	"ACL" : "URLBEG;/jpg/;IP-41.2.2.12:80:31500;",
+	"ACL" : "URLBEG-NOT;/jpg/;IP-41.2.2.12:80:31500;",
 	"ACL" : "URLBEG;/jss/;IP-41.2.2.20:80:32500;IP-41.2.2.21:80:41500;",
 
 	"VIPS-server-ip-port": "10.0.0.3:81",

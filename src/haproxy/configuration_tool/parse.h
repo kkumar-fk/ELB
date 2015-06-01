@@ -100,4 +100,6 @@ struct proxy_frontend {
 #define VIPS_SERVER_MAXCONN		"VIPS-server-maxconn"
 #define VIPS_SERVER_SRC_IP_PORT		"VIPS-server-src-ip-port"
 
+#define URLBEG				"URLBEG"
+#define URLBEG_NOT			"URLBEG-NOT"
 #endif
