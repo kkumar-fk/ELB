@@ -18,40 +18,24 @@ int min(int a, int b)
 	return a < b ? a : b;
 }
 
-int initialize_system()
+char *get_string(char *string, int how_many)
 {
-	int numcpus = 1;
-	int cpus = sysconf(_SC_NPROCESSORS_CONF);
-
-	if (cpus > 0)
-		numcpus = min(MAX_NBPROC, cpus);
-	return numcpus;
-}
-
-char *get_string(char *ptr, int num_to_skip)
-{
-	char *head;
-
 	do {
-		while (*ptr != '"') {
-			ptr++;
-			if (!*ptr)
-				return NULL;
+		char *end = strchr(string ,'"');
+
+		if (how_many-- <= 0) {
+			char tmp[100];
+
+			if (!end)
+				return strdup(string);
+			strncpy(tmp, string, end - string);
+			tmp[end-string] = 0;
+			return strdup(tmp);
 		}
-		ptr++;
-	} while (--num_to_skip > 0);
+		string = end + 1;
+	} while (1);
 
-	head = ptr;
-	if (!*head)
-		return NULL;
-
-	while (*ptr != '"') {
-		ptr++;
-		if (!*ptr)
-			return NULL;
-	}
-
-	return strndup(head, ptr - head);
+	return NULL;
 }
 
 char *get_key(char *ptr)
@@ -260,15 +244,13 @@ void write_bind_lines(FILE *fp, int index)
 
 char *string_till_delim(char *string, int how_many)
 {
-	int i = 0;
-
 	do {
 		char *end = strchr(string, ';');
 
 		if (!end)
 			return NULL;
 
-		if (++i == how_many) {
+		if (--how_many <= 0) {
 			char tmp[100];
 
 			strncpy(tmp, string, end - string);
@@ -348,12 +330,10 @@ void write_frontend_forward(FILE *fp, char *type, int index)
  */
 char *get_subcomponent(char *start, int how_many)
 {
-	int i = 0;
-
 	do {
 		char *end = strchr(start, ':');
 
-		if (++i == how_many) {
+		if (--how_many <= 0) {
 			char tmp[100];
 
 			if (!end)
@@ -519,6 +499,8 @@ void parse_line(char *line, int index)
 
 	strcpy(xml_input[index].key, get_key(line));
 	strcpy(xml_input[index].value, get_value(line));
+	//printf("Saved %s and %s\n",
+		// xml_input[index].key, xml_input[index].value);
 }
 
 /* Return true if the first non-space character is '#' */
@@ -708,6 +690,16 @@ void configure_fe_be(FILE *fp)
 	}
 }
 
+int get_cpu_info()
+{
+	int numcpus = 1;
+	int cpus = sysconf(_SC_NPROCESSORS_CONF);
+
+	if (cpus > 0)
+		numcpus = min(MAX_NBPROC, cpus);
+	return numcpus;
+}
+
 int main(void)
 {
 	FILE *fp = fopen(CONFIG_FILE, "w");
@@ -718,7 +710,7 @@ int main(void)
 		return 1;
 	}
 
-	numcpus = initialize_system();
+	numcpus = get_cpu_info();
 
 	read_input(MAX_LINES);
 
